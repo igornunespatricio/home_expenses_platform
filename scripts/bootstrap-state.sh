@@ -38,3 +38,6 @@ echo
 echo "Done. Use this in infra/backend.tf:"
 echo "  bucket = \"${BUCKET}\""
 echo "  region = \"${REGION}\""
+# Set GitHub repository secrets for CI/CD pipeline
+gh secret set BUCKET --body "${BUCKET}"
+gh secret set REGION --body "${REGION}"
