@@ -1,0 +1,70 @@
+# ---------- Terraform ----------
+# Provider plugins and module cache
+**/.terraform/*
+# State (lives in S3; never commit it)
+*.tfstate
+*.tfstate.*
+# Plans and crash logs
+*.tfplan
+tfplan
+crash.log
+crash.*.log
+# Local overrides and backend config with real values
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+backend.hcl
+*.auto.tfvars
+secrets.tfvars
+# NOTE: .terraform.lock.hcl is NOT ignored on purpose. Commit it so local runs
+# and CI use the same provider versions. envs/dev.tfvars and envs/prod.tfvars
+# are also committed (they contain no secrets).
+
+# ---------- Lambda build output ----------
+*.zip
+api/build/
+api/package/
+api/.aws-sam/
+
+# ---------- Python (api/) ----------
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# ---------- Node / React (app/) ----------
+node_modules/
+app/dist/
+app/build/
+.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ---------- Secrets and local env ----------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.aws/
+credentials
+
+# ---------- Script logs ----------
+*.log
+
+# ---------- Editors and OS ----------
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
