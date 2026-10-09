@@ -43,5 +43,17 @@ output "lambda_function_name" {
   value       = module.api.function_name
 }
 
-# Added as the next modules are built:
-#   cloudfront_domain, bucket_name, distribution_id (frontend)
+output "cloudfront_domain" {
+  description = "Site domain (the app and /api/* are both served from here)."
+  value       = module.frontend.cloudfront_domain
+}
+
+output "bucket_name" {
+  description = "S3 bucket for the built React app."
+  value       = module.frontend.bucket_name
+}
+
+output "distribution_id" {
+  description = "CloudFront distribution ID (cache invalidation after deploys)."
+  value       = module.frontend.distribution_id
+}

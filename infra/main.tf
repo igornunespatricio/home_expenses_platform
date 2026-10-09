@@ -66,5 +66,10 @@ module "api" {
   log_retention_days = local.env == "prod" ? 30 : 7
 }
 
-# Next module (added when built):
-#   module "frontend" -> private S3 + CloudFront
+module "frontend" {
+  source = "./modules/frontend"
+
+  name          = local.name
+  api_domain    = module.api.api_domain
+  force_destroy = local.env != "prod" # dev can be destroyed with files inside; prod cannot
+}
