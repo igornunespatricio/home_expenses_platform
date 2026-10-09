@@ -49,6 +49,22 @@ module "auth" {
   deletion_protection = var.deletion_protection
 }
 
-# Next modules (added as they are built):
-#   module "api"      -> Lambda + API Gateway + JWT authorizer
+module "api" {
+  source = "./modules/api"
+
+  name       = local.name
+  source_dir = "${path.root}/../api"
+
+  table_name = module.database.table_name
+  table_arn  = module.database.table_arn
+  gsi_name   = module.database.gsi1_name
+  gsi_arn    = module.database.gsi1_arn
+
+  issuer_url = module.auth.issuer_url
+  client_id  = module.auth.user_pool_client_id
+
+  log_retention_days = local.env == "prod" ? 30 : 7
+}
+
+# Next module (added when built):
 #   module "frontend" -> private S3 + CloudFront

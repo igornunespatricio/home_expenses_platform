@@ -1,0 +1,5 @@
+# The Lambda python3.12 runtime already includes boto3, so nothing is packaged.
+# Listed here only for local development and tests.
+boto3
+pytest
+ruff

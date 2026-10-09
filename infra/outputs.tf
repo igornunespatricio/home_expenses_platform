@@ -28,5 +28,20 @@ output "cognito_issuer_url" {
   value       = module.auth.issuer_url
 }
 
+output "api_endpoint" {
+  description = "Direct API Gateway URL (for curl tests; the app uses CloudFront /api/*)."
+  value       = module.api.api_endpoint
+}
+
+output "api_domain" {
+  description = "API Gateway host, used as the CloudFront origin."
+  value       = module.api.api_domain
+}
+
+output "lambda_function_name" {
+  description = "Lambda function name (for logs)."
+  value       = module.api.function_name
+}
+
 # Added as the next modules are built:
 #   cloudfront_domain, bucket_name, distribution_id (frontend)
