@@ -13,6 +13,20 @@ output "dynamodb_table_arn" {
   value       = module.database.table_arn
 }
 
+output "user_pool_id" {
+  description = "Cognito user pool ID (React app config, admin-create-user)."
+  value       = module.auth.user_pool_id
+}
+
+output "user_pool_client_id" {
+  description = "Cognito app client ID (React app config)."
+  value       = module.auth.user_pool_client_id
+}
+
+output "cognito_issuer_url" {
+  description = "JWT issuer URL used by the API Gateway authorizer."
+  value       = module.auth.issuer_url
+}
+
 # Added as the next modules are built:
 #   cloudfront_domain, bucket_name, distribution_id (frontend)
-#   user_pool_id, user_pool_client_id (auth)

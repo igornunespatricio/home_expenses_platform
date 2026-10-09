@@ -42,7 +42,13 @@ module "database" {
   deletion_protection    = var.deletion_protection
 }
 
+module "auth" {
+  source = "./modules/auth"
+
+  name                = local.name
+  deletion_protection = var.deletion_protection
+}
+
 # Next modules (added as they are built):
-#   module "auth"     -> Cognito user pool + app client
 #   module "api"      -> Lambda + API Gateway + JWT authorizer
 #   module "frontend" -> private S3 + CloudFront
