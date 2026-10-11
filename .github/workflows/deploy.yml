@@ -1,0 +1,117 @@
+name: Deploy
+
+# Reusable workflow: deploys one environment (dev or prod). Called by cd.yml.
+# Steps: terraform apply -> build the React app with the stack's outputs -> upload to S3 -> invalidate CloudFront.
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: Environment to deploy (dev or prod). Also the Terraform workspace name.
+        required: true
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    name: ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    # Holds AWS_ROLE_ARN, AWS_REGION and TF_STATE_BUCKET. For prod this is also the approval gate.
+    environment:
+      name: ${{ inputs.environment }}
+      url: ${{ steps.outputs.outputs.site_url }}
+    # Never run two deploys of the same environment at once, and never cancel one halfway.
+    concurrency:
+      group: deploy-${{ inputs.environment }}
+      cancel-in-progress: false
+    env:
+      TF_IN_AUTOMATION: "true"
+      ENVIRONMENT: ${{ inputs.environment }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "^1.10.0"
+          terraform_wrapper: false
+
+      # ---------- Infrastructure ----------
+      - name: Terraform init
+        working-directory: infra
+        run: |
+          terraform init -input=false \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="region=${{ vars.AWS_REGION }}"
+
+      - name: Select workspace
+        working-directory: infra
+        run: |
+          terraform workspace select -or-create "$ENVIRONMENT"
+          test "$(terraform workspace show)" = "$ENVIRONMENT"
+
+      - name: Terraform apply
+        working-directory: infra
+        run: terraform apply -input=false -auto-approve -var-file="envs/${ENVIRONMENT}.tfvars"
+
+      - name: Read Terraform outputs
+        id: outputs
+        working-directory: infra
+        run: |
+          {
+            echo "bucket=$(terraform output -raw bucket_name)"
+            echo "distribution_id=$(terraform output -raw distribution_id)"
+            echo "user_pool_id=$(terraform output -raw user_pool_id)"
+            echo "user_pool_client_id=$(terraform output -raw user_pool_client_id)"
+            echo "site_url=https://$(terraform output -raw cloudfront_domain)"
+          } >> "$GITHUB_OUTPUT"
+
+      # ---------- Frontend ----------
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Build app
+        working-directory: app
+        env:
+          VITE_USER_POOL_ID: ${{ steps.outputs.outputs.user_pool_id }}
+          VITE_USER_POOL_CLIENT_ID: ${{ steps.outputs.outputs.user_pool_client_id }}
+        run: |
+          npm ci
+          npm run build
+
+      - name: Upload to S3
+        env:
+          BUCKET: ${{ steps.outputs.outputs.bucket }}
+        run: |
+          # Hashed asset files never change, so they can be cached for a year.
+          aws s3 sync app/dist "s3://${BUCKET}" --delete \
+            --exclude "index.html" \
+            --cache-control "public,max-age=31536000,immutable"
+          # index.html last, so it never points at assets that are not uploaded yet.
+          aws s3 cp app/dist/index.html "s3://${BUCKET}/index.html" \
+            --cache-control "no-cache"
+
+      - name: Invalidate CloudFront
+        env:
+          DISTRIBUTION_ID: ${{ steps.outputs.outputs.distribution_id }}
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id "$DISTRIBUTION_ID" --paths "/*" >/dev/null
+
+      - name: Summary
+        env:
+          SITE_URL: ${{ steps.outputs.outputs.site_url }}
+        run: |
+          echo "Deployed **${ENVIRONMENT}**: ${SITE_URL}" >> "$GITHUB_STEP_SUMMARY"
