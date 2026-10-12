@@ -28,6 +28,7 @@ done
 
 # --- Configuration (nothing hardcoded: derived from the current repo) -------
 GITHUB_REPO="$(gh repo view --json nameWithOwner --jq .nameWithOwner)"   # owner/repo
+GITHUB_REPO_IMMUTABLE="$(gh repo view --json owner,name,id --jq '"\(.owner.login)@\(.owner.id)/\(.name)@\(.id)"')"
 REPO_NAME="${GITHUB_REPO#*/}"                                            # repo
 ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
 AWS_REGION="${AWS_REGION:-us-east-1}"
@@ -74,8 +75,8 @@ TRUST_POLICY="$(cat <<EOF
         "StringEquals": { "${OIDC_HOST}:aud": "sts.amazonaws.com" },
         "StringLike": {
           "${OIDC_HOST}:sub": [
-            "repo:${GITHUB_REPO}:environment:dev",
-            "repo:${GITHUB_REPO}:environment:prod"
+            "repo:${GITHUB_REPO_IMMUTABLE}:environment:dev",
+            "repo:${GITHUB_REPO_IMMUTABLE}:environment:prod"
           ]
         }
       }
