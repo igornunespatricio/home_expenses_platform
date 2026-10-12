@@ -4,8 +4,8 @@ locals {
   bucket_name = "${var.name}-frontend-${data.aws_caller_identity.current.account_id}"
 
   # AWS managed policies (fixed IDs)
-  cache_policy_optimized = data.aws_cloudfront_cache_policy.optimized
-  cache_policy_disabled  = data.aws_cloudfront_cache_policy.disabled
+  cache_policy_optimized = data.aws_cloudfront_cache_policy.optimized.id
+  cache_policy_disabled  = data.aws_cloudfront_cache_policy.disabled.id
   origin_request_policy  = "b689b0a8-53d0-40ab-baf2-68738e2966ac" # AllViewerExceptHostHeader
   response_headers       = "67f7725c-6f97-4210-82d7-5512b31e9d03" # SecurityHeadersPolicy
 }
