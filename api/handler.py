@@ -255,7 +255,7 @@ def lambda_handler(event, context):
 
     except HttpError as err:
         return response(err.status, {"error": err.message})
-    except Exception:
+    except Exception:  # noqa: BLE001 - last-resort handler: always answer with JSON
         # Details go to CloudWatch, not to the client
         print("Unhandled error", flush=True)
         import traceback

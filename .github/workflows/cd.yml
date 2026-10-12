@@ -1,0 +1,28 @@
+name: CD
+
+# Every push to main deploys dev. Prod then waits for the approval set on the
+# "prod" GitHub environment (required reviewers) before it deploys the same commit.
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**.md"
+  workflow_dispatch:
+
+permissions:
+  id-token: write # OIDC login to AWS (the called workflow can't exceed this)
+  contents: read
+
+jobs:
+  deploy-dev:
+    name: Deploy dev
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: dev
+
+  deploy-prod:
+    name: Deploy prod
+    needs: deploy-dev
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: prod

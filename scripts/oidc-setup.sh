@@ -28,6 +28,7 @@ done
 
 # --- Configuration (nothing hardcoded: derived from the current repo) -------
 GITHUB_REPO="$(gh repo view --json nameWithOwner --jq .nameWithOwner)"   # owner/repo
+GITHUB_REPO_IMMUTABLE="$(gh api repos/{owner}/{repo} --jq '"\(.owner.login)@\(.owner.id)/\(.name)@\(.id)"')"
 REPO_NAME="${GITHUB_REPO#*/}"                                            # repo
 ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
 AWS_REGION="${AWS_REGION:-us-east-1}"
@@ -59,7 +60,8 @@ else
   echo "  Provider created."
 fi
 
-# --- Step 2: IAM role trusted only by THIS repo -----------------------------
+# --- Step 2: IAM role trusted only by THIS repo's dev and prod environments --
+# (no plain pull_request subject: workflows that need AWS must run in an environment)
 echo "Step 2: Ensuring IAM role exists..."
 TRUST_POLICY="$(cat <<EOF
 {
@@ -73,9 +75,8 @@ TRUST_POLICY="$(cat <<EOF
         "StringEquals": { "${OIDC_HOST}:aud": "sts.amazonaws.com" },
         "StringLike": {
           "${OIDC_HOST}:sub": [
-            "repo:${GITHUB_REPO}:environment:dev",
-            "repo:${GITHUB_REPO}:environment:prod",
-            "repo:${GITHUB_REPO}:pull_request"
+            "repo:${GITHUB_REPO_IMMUTABLE}:environment:dev",
+            "repo:${GITHUB_REPO_IMMUTABLE}:environment:prod"
           ]
         }
       }
@@ -116,14 +117,25 @@ for ENV in dev prod; do
   echo "  [${ENV}] environment created and variables set."
 done
 
-# Approval gate on prod: make the current GitHub user a required reviewer.
-# Best effort: private repos on the free GitHub plan don't support this.
+# Protect prod: you are the required reviewer, and only the main branch may deploy to it.
+# Self-review stays allowed so a solo maintainer can approve their own deploys.
+# Best effort: required reviewers are free on public repos, but on private repos they need
+# GitHub Enterprise (and deployment branch rules need Pro, Team or Enterprise).
 USER_ID="$(gh api user --jq .id)"
-if echo "{\"reviewers\":[{\"type\":\"User\",\"id\":${USER_ID}}]}" \
+PROD_SETTINGS="{\"reviewers\":[{\"type\":\"User\",\"id\":${USER_ID}}],\"prevent_self_review\":false,\"deployment_branch_policy\":{\"protected_branches\":false,\"custom_branch_policies\":true}}"
+if echo "$PROD_SETTINGS" \
      | gh api -X PUT "repos/${GITHUB_REPO}/environments/prod" --input - >/dev/null 2>&1; then
   echo "  [prod] required reviewer set (you)."
+
+  POLICIES_URL="repos/${GITHUB_REPO}/environments/prod/deployment-branch-policies"
+  EXISTING="$(gh api "$POLICIES_URL" --jq '.branch_policies[].name' 2>/dev/null || true)"
+  if ! grep -qx "main" <<<"$EXISTING"; then
+    gh api -X POST "$POLICIES_URL" -f name=main -f type=branch >/dev/null
+  fi
+  echo "  [prod] deployments limited to the main branch."
 else
-  echo "  [prod] WARNING: could not set required reviewers (private repos need GitHub Pro/Team)."
+  echo "  [prod] WARNING: could not set required reviewers or the branch restriction."
+  echo "         On private repos reviewers need GitHub Enterprise; on public repos any plan works."
   echo "         Set it manually: https://github.com/${GITHUB_REPO}/settings/environments"
 fi
 
