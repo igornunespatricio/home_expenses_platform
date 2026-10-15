@@ -66,6 +66,23 @@ module "api" {
   log_retention_days = local.env == "prod" ? 30 : 7
 }
 
+module "receipts" {
+  source = "./modules/receipts"
+
+  name       = local.name
+  source_dir = "${path.root}/../api"
+
+  table_name = module.database.table_name
+  table_arn  = module.database.table_arn
+
+  api_id            = module.api.api_id
+  api_execution_arn = module.api.api_execution_arn
+  authorizer_id     = module.api.authorizer_id
+
+  force_destroy      = local.env != "prod" # dev can be destroyed with files inside; prod cannot
+  log_retention_days = local.env == "prod" ? 30 : 7
+}
+
 module "frontend" {
   source = "./modules/frontend"
 

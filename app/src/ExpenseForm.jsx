@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { parseAmount, today } from './format.js'
-
-const CATEGORIES = ['supermarket', 'clothing', 'restaurant', 'transport', 'health', 'home', 'leisure']
+import { CATEGORIES } from './options.js'
 
 /**
  * Add / edit dialog. `expense` is null when adding.
@@ -29,9 +28,13 @@ export default function ExpenseForm({ expense, merchants, onSave, onClose }) {
     event.preventDefault()
     setError('')
 
-    const parsed = parseAmount(amount)
+    // A receipt's discount line is the one expense that is negative.
+    const isDiscount = expense?.kind === 'discount'
+    const parsed = parseAmount(amount, { discount: isDiscount })
     if (parsed === null) {
-      setError('Enter an amount greater than 0, like 42,90.')
+      setError(
+        isDiscount ? 'Enter the discount amount, like 2,04.' : 'Enter an amount greater than 0, like 42,90.',
+      )
       return
     }
 

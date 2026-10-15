@@ -43,6 +43,16 @@ output "lambda_function_name" {
   value       = module.api.function_name
 }
 
+output "receipts_lambda_function_name" {
+  description = "Receipts Lambda function name (for logs)."
+  value       = module.receipts.function_name
+}
+
+output "receipts_bucket_name" {
+  description = "Private S3 bucket with the original receipt files."
+  value       = module.receipts.bucket_name
+}
+
 output "cloudfront_domain" {
   description = "Site domain (the app and /api/* are both served from here)."
   value       = module.frontend.cloudfront_domain

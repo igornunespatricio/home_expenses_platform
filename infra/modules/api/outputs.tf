@@ -17,3 +17,13 @@ output "function_name" {
   description = "Lambda function name."
   value       = aws_lambda_function.api.function_name
 }
+
+output "api_execution_arn" {
+  description = "API Gateway execution ARN (Lambda invoke permissions for extra routes)."
+  value       = aws_apigatewayv2_api.this.execution_arn
+}
+
+output "authorizer_id" {
+  description = "ID of the Cognito JWT authorizer (extra routes reuse it)."
+  value       = aws_apigatewayv2_authorizer.cognito.id
+}

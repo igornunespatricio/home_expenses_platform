@@ -68,3 +68,5 @@ credentials
 *.swp
 .DS_Store
 Thumbs.db
+
+nfce_samples/*
