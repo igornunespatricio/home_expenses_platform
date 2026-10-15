@@ -65,12 +65,17 @@ def clean(value, field):
     return value.strip().lower()
 
 
-def parse_amount(value):
+def parse_amount(value, negative=False):
+    """Expenses are positive. Only a receipt's discount line (kind 'discount') is negative."""
     try:
         amount = Decimal(str(value))
     except (InvalidOperation, ValueError):
         raise HttpError(400, "'amount' must be a number")
-    if not amount.is_finite() or amount <= 0:
+    if not amount.is_finite():
+        raise HttpError(400, "'amount' must be a number")
+    if negative and amount >= 0:
+        raise HttpError(400, "'amount' of a discount must be less than 0")
+    if not negative and amount <= 0:
         raise HttpError(400, "'amount' must be greater than 0")
     return amount.quantize(Decimal("0.01"))
 
@@ -92,7 +97,7 @@ def parse_month(value):
         raise HttpError(400, "'month' must be YYYY-MM")
 
 
-def build_item(user, expense_id, data):
+def build_item(user, expense_id, data, negative=False):
     """Validate input and build the DynamoDB item."""
     expense_date = parse_date(data.get("date"))
     merchant = clean(data.get("merchant"), "merchant")
@@ -103,7 +108,7 @@ def build_item(user, expense_id, data):
     return {
         "pk": pk,
         "sk": f"EXP#{expense_date}#{expense_id}",
-        "amount": parse_amount(data.get("amount")),
+        "amount": parse_amount(data.get("amount"), negative),
         "date": expense_date,
         "category": clean(data.get("category"), "category"),
         "merchant": merchant,
@@ -204,7 +209,10 @@ def update(user, expense_id, event):
     merged.update({k: v for k, v in changes.items() if k in merged})
 
     suffix = expense_id.split("#", 2)[2]
-    item = build_item(user, suffix, merged)
+    item = build_item(user, suffix, merged, negative=existing.get("kind") == "discount")
+    # Keep the attributes the form does not edit (quantity, unit price, receipt key, ...).
+    for key, value in existing.items():
+        item.setdefault(key, value)
     table().put_item(Item=item)
 
     # The date is part of the sort key: if it changed, the old item must go.

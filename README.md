@@ -32,7 +32,10 @@ The API is served under `/api/*` on the same CloudFront domain, so there is no C
 │   ├── .env.example             copy to .env.local for local dev
 │   └── package.json / package-lock.json / vite.config.js / eslint.config.js / index.html
 ├── api/
-│   ├── handler.py               Lambda: all CRUD routes
+│   ├── handler.py               Lambda: expense CRUD routes
+│   ├── receipts_handler.py      Lambda: import a receipt page (/api/receipts/*)
+│   ├── receipt_parser.py        NFC-e (.mht/.html) parser, standard library only
+│   ├── tests/                   pytest: handlers, parser, synthetic receipt fixtures
 │   └── requirements.txt         dev only (Lambda already ships boto3)
 ├── infra/
 │   ├── backend.tf               S3 backend (bucket passed at init, not hardcoded)
@@ -43,6 +46,7 @@ The API is served under `/api/*` on the same CloudFront domain, so there is no C
 │       ├── database/            DynamoDB table + merchant index
 │       ├── auth/                Cognito user pool + app client
 │       ├── api/                 Lambda, IAM, API Gateway, JWT authorizer
+│       ├── receipts/            second Lambda + its routes, private S3 bucket for the original receipt files
 │       └── frontend/            S3, CloudFront, OAC, SPA routing function
 ├── scripts/
 │   ├── bootstrap-state.sh       creates the Terraform state bucket
@@ -72,6 +76,17 @@ Table `expenses-<env>`, for example `expenses-dev`.
 
 `category` and `merchant` are stored in lowercase so `Nike` and `nike` don't split.
 
+### Imported receipts
+
+A receipt imported from an NFC-e page becomes **one expense row per item** (same shape as above, so lists, filters and totals work unchanged) plus one `RECEIPT#` row:
+
+| Row | Key | Extra attributes |
+|-----|-----|------------------|
+| Item | `sk = EXP#<date>#<access key>-<line>` | `kind` (`product` or `discount`), `line`, `code`, `quantity`, `unit`, `unit_price`, `receipt_key`; `description` is the item name |
+| Receipt | `sk = RECEIPT#<access key>` | issuer name and CNPJ, number, series, `issued_at`, `subtotal`, `discount`, `total_paid`, `payments`, `change`, `item_count`, `s3_key`, `imported_at` |
+
+A receipt-level discount is saved as an extra item with a **negative** `amount`, so item prices stay as printed and the rows add up to what was paid. The `RECEIPT#` row is written last and marks the receipt as imported (importing it again returns 409). The original file is kept in a private S3 bucket at `receipts/<user>/<access key>.mht`, with CPF numbers masked.
+
 ## API
 
 All routes need `Authorization: Bearer <Cognito ID token>`. Without a valid token API Gateway answers 401 and the Lambda never runs.
@@ -83,6 +98,15 @@ All routes need `Authorization: Bearer <Cognito ID token>`. Without a valid toke
 | GET    | `/api/expenses/{id}` | Get one                                                  |
 | PUT    | `/api/expenses/{id}` | Update                                                   |
 | DELETE | `/api/expenses/{id}` | Delete                                                   |
+
+Receipt import (needs the same token; the file is the saved NFC-e page as base64):
+
+| Method | Path                    | Action                                                                 |
+|--------|-------------------------|------------------------------------------------------------------------|
+| POST   | `/api/receipts/import`  | Parse the file and return a draft for review. Writes nothing; 409 if already imported, 422 if unreadable |
+| POST   | `/api/receipts`         | Save the reviewed receipt: original file to S3, one expense row per item, then the `RECEIPT#` row |
+
+The save request is `{"file": "<base64>", "receipt": {"merchant", "category", "date", "items": [...]}}`. The access key always comes from the file, never from the client. Receipts come from RJ's NFC-e portal (`consultadfe.fazenda.rj.gov.br`) saved as `.mht` or `.html`; other states use different pages and are rejected.
 
 `{id}` is the URL-encoded `sk`. Input is validated (amount > 0, valid date, merchant and category required) and errors come back as `{"error": "..."}`. Changing an expense's date changes its `id`, because the date is part of the key: the response carries the new one.
 
@@ -140,6 +164,7 @@ Prerequisites: AWS CLI with admin credentials, GitHub CLI (`gh`) logged in, Terr
 ## App (React)
 
 - Login with Cognito, then a month view: total, spending by merchant (click a merchant to filter), expenses grouped by day, add / edit / delete.
+- **Import receipt:** pick a saved NFC-e page (`.mht`; in Chrome or Edge press Ctrl+S on the receipt and choose "Webpage, Single File"). The server reads it, you review and edit the merchant, date, category and every item (name, quantity, unit price, total; a discount is a negative line), then save. One expense is created per item.
 - Display is in English with amounts in BRL. Change the two constants at the top of `app/src/format.js` for another currency or locale.
 - Build-time config: `VITE_USER_POOL_ID` and `VITE_USER_POOL_CLIENT_ID` (Terraform outputs). The pipeline sets them; locally use `app/.env.local`.
 - Run locally against the deployed dev stack:
@@ -169,7 +194,7 @@ Recommended: protect `main` (pull request and passing CI required). Required rev
 
 ## Next steps
 
-1. API tests in `api/tests/` (CI already runs them once the folder exists).
+1. Receipts from other states (each portal has its own page layout), and a photo/screenshot import for receipts without a saved page.
 2. A least-privilege policy for the deploy role instead of `AdministratorAccess`.
 3. Custom domain (Route 53 + ACM certificate in `us-east-1`).
 4. Budget alert and Lambda error alarm.

@@ -1,7 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createExpense, deleteExpense, listExpenses, updateExpense } from './api.js'
 import ExpenseForm from './ExpenseForm.jsx'
-import { currentMonth, dayLabel, formatMoney, monthLabel, shiftMonth } from './format.js'
+import ReceiptImport from './ReceiptImport.jsx'
+import {
+  currentMonth,
+  dayLabel,
+  formatMoney,
+  formatQuantity,
+  monthLabel,
+  shiftMonth,
+} from './format.js'
 
 const MAX_SEGMENTS = 6
 const SEED_MERCHANTS = ['guanabara', 'assai', 'mundial']
@@ -14,6 +22,7 @@ export default function Tracker({ signOut, email }) {
   const [state, setState] = useState({ status: 'loading', items: [], error: '' })
   const [merchantFilter, setMerchantFilter] = useState(null)
   const [editing, setEditing] = useState(null) // null | 'new' | an expense
+  const [importing, setImporting] = useState(false)
   const [confirmId, setConfirmId] = useState(null)
   const [actionError, setActionError] = useState('')
 
@@ -82,13 +91,18 @@ export default function Tracker({ signOut, email }) {
     setActionError('')
   }
 
+  // After a save, show the month the expense landed in.
+  function showMonthOf(date) {
+    const savedMonth = date.slice(0, 7)
+    if (savedMonth === month) setReload((n) => n + 1)
+    else goToMonth(savedMonth)
+  }
+
   async function save(payload) {
     const saved =
       editing === 'new' ? await createExpense(payload) : await updateExpense(editing.id, payload)
     setEditing(null)
-    const savedMonth = saved.date.slice(0, 7)
-    if (savedMonth === month) setReload((n) => n + 1)
-    else goToMonth(savedMonth)
+    showMonthOf(saved.date)
   }
 
   async function remove(id) {
@@ -210,6 +224,9 @@ export default function Tracker({ signOut, email }) {
                 Show all
               </button>
             )}
+            <button type="button" className="secondary" onClick={() => setImporting(true)}>
+              Import receipt
+            </button>
             <button type="button" className="primary" onClick={() => setEditing('new')}>
               Add expense
             </button>
@@ -254,6 +271,11 @@ export default function Tracker({ signOut, email }) {
                         <span className="detail">
                           {item.category}
                           {item.description && <span className="note">{item.description}</span>}
+                          {item.kind === 'product' && item.quantity != null && (
+                            <span className="note">
+                              {formatQuantity(item.quantity)} {item.unit} × {formatMoney(item.unit_price)}
+                            </span>
+                          )}
                         </span>
                       </div>
                       <span className="amount">{formatMoney(item.amount)}</span>
@@ -296,6 +318,17 @@ export default function Tracker({ signOut, email }) {
           merchants={merchantOptions}
           onSave={save}
           onClose={() => setEditing(null)}
+        />
+      )}
+
+      {importing && (
+        <ReceiptImport
+          merchants={merchantOptions}
+          onSaved={(date) => {
+            setImporting(false)
+            showMonthOf(date)
+          }}
+          onClose={() => setImporting(false)}
         />
       )}
     </div>

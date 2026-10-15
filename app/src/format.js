@@ -29,14 +29,30 @@ export const dayLabel = (isoDate) =>
   parts(isoDate).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
 
 /**
- * Reads what a person types: "42,90", "42.90", "1.234,56", "R$ 15".
+ * Reads a number the way a person types it: "42,90", "42.90", "1.234,56", "R$ 15", "-2,04".
  * A comma means decimal comma (dots are thousands); otherwise a dot is the decimal point.
- * Returns a number greater than 0, or null.
+ * Returns the number, or null if it is not one. No rounding (quantities have 3 decimals).
  */
-export function parseAmount(text) {
-  const cleaned = text.trim().replace(/\s/g, '').replace(/^R\$/i, '')
+export function parseNumber(text) {
+  const cleaned = String(text).trim().replace(/\s/g, '').replace(/^(-?)R\$/i, '$1')
   const normalized = cleaned.includes(',') ? cleaned.replace(/\./g, '').replace(',', '.') : cleaned
-  const value = Number(normalized)
-  if (!normalized || !Number.isFinite(value) || value <= 0) return null
-  return Math.round(value * 100) / 100
+  if (!/^-?(\d+\.?\d*|\.\d+)$/.test(normalized)) return null
+  return Number(normalized)
 }
+
+/**
+ * An amount of money, rounded to cents. Expenses must be greater than 0.
+ * With `discount`, the sign is ignored and the result is negative ("2,04" and "-2,04" both give -2.04).
+ * Returns null when it is not valid.
+ */
+export function parseAmount(text, { discount = false } = {}) {
+  const value = parseNumber(text)
+  if (value === null) return null
+  const amount = discount ? -Math.abs(value) : value
+  if (amount === 0 || (!discount && amount < 0)) return null
+  return Math.round(amount * 100) / 100
+}
+
+const quantity = new Intl.NumberFormat(MONEY_LOCALE, { maximumFractionDigits: 3 })
+
+export const formatQuantity = (value) => quantity.format(value)
